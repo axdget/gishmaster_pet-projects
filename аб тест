@@ -1,0 +1,338 @@
+#  Цели проекта
+- изучить воронку продаж
+- исследовать результаты A/A/B-эксперимента
+- выяснить, какой шрифт лучше.
+<h1> Изучение воронки продаж<a class="tocSkip"></h>
+
+
+    Предоставлены результаты А/А-В теста в котором были проведены изменния шрифта, нужно изучить данны представленные в виде таблицы. Таблица содержит данные о: название события;уникальный идентификатор пользователя; время события; номер эксперимента.
+    
+    
+    Первый этап:
+    - Нужно разобраться, как ведут себя пользователи вашего мобильного приложения.
+    - Изучить воронку продаж. 
+    - Узнайте, как пользователи доходят до покупки. 
+    - Сколько пользователей доходит до покупки, а сколько — «застревает» на предыдущих шагах? На каких именно?
+    Второй этап:
+    - Исследовать результаты A/A/B-эксперимента. 
+    - Выясните, какой шрифт лучше.
+    Третий этап:
+    - Сформулировать выводы
+    
+    Шаги проекта:
+    - Шаг 1. Откройте файл с данными и изучите общую информацию
+    - Шаг 2. Подготовьте данные    
+    - Шаг 3. Изучите и проверьте данные
+    - Шаг 4. Изучите воронку событий
+    - Шаг 5. Изучите результаты эксперимента
+# Изучение и предподготвока данных
+## Шаг 1
+#иморт библиотек
+import pandas as pd
+import scipy.stats as st
+import datetime as dt
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+import math as mth
+import plotly.express as px
+from datetime import datetime
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_colwidth', None)
+# чтение файлов и изменение типа данных 
+data = pd.read_csv('/datasets/logs_exp.csv', sep='\t')
+print(data.head())
+print('----------------------')
+print('Duplicates:',data.duplicated().sum())
+print('Duplicates share:',data.duplicated().sum()/len(data))
+print('----------------------')
+print(data.info())
+print('----------------------')
+print(data.isna().sum())
+
+def z_criteria(group_a,group_aa,top_event):
+    g_a = group_a.groupby('eventname').agg({'id':'nunique'})
+    g_aa = group_aa.groupby('eventname').agg({'id':'nunique'})
+    g_a = g_a.reset_index(level=0)
+    g_aa = g_aa.reset_index(level=0)
+    
+    
+    
+    alpha = 0.01 # критический уровень статистической значимости
+    for i in top_event:
+        successes = np.array([g_a['id'][g_a['eventname']==i], g_aa['id'][g_aa['eventname']==i]])
+        trials = np.array([len(group_a['id'].unique()), len(group_aa['id'].unique())])
+
+        # пропорция успехов в первой группе:
+        p1 = successes[0]/trials[0]
+        print('конверсия',i, 'в первой группе:',p1)
+        # пропорция успехов во второй группе:
+        p2 = successes[1]/trials[1]
+        print('конверсия',i, 'во второй группе:',p2)
+        # пропорция успехов в комбинированном датасете:
+        p_combined = (successes[0] + successes[1]) / (trials[0] + trials[1])
+
+        # разница пропорций в датасетах
+        difference = p1 - p2 
+        # считаем статистику в ст.отклонениях стандартного нормального распределения
+        z_value = difference / mth.sqrt(p_combined * (1 - p_combined) * (1/trials[0] + 1/trials[1]))
+
+        # задаем стандартное нормальное распределение (среднее 0, ст.отклонение 1)
+        distr = st.norm(0, 1) 
+
+        p_value = (1 - distr.cdf(abs(z_value))) * 2
+
+        print('p-значение: ', p_value)
+
+        if p_value < alpha:
+            print('Отвергаем нулевую гипотезу: между долями есть значимая разница')
+        else:
+            print(
+                'Не получилось отвергнуть нулевую гипотезу, нет оснований считать доли разными'
+            )
+
+## Шаг 2. Подготовьте данные
+#Добавьте столбец даты и времени, а также отдельный столбец дат
+data = data.drop_duplicates()
+data = data.rename(columns=lambda x: x.lower())
+data= data.rename(columns={'deviceidhash':'id'})
+data['date'] = data['eventtimestamp'].map(lambda x:datetime.utcfromtimestamp(x).strftime('%Y-%m-%d'))
+data['datetime'] = data['eventtimestamp'].map(lambda x:datetime.utcfromtimestamp(x).strftime('%Y-%m-%d %H:%M:%S'))
+data.head()
+## Шаг 3. Изучите и проверьте данные
+#Сколько всего событий в логе?
+print('видов событий:',len(data['eventname'].unique()))
+print('всего событий:',len(data['eventname']))
+
+print()
+print(*data['eventname'].unique(),sep='\n')
+
+#Сколько всего пользователей в логе?
+print('всего пользователей в логе:',len(data['id'].unique()))
+#Сколько в среднем событий приходится на пользователя?
+av = round(data[['id','eventname']].groupby('id').agg({'eventname':'count'}).mean(),0)
+print('В среднем событий на пользователя:',av[0])
+#Данными за какой период вы располагаете? Найдите максимальную и минимальную дату.
+print('максимальная дата:',data['date'].max())
+print('минимальная дата:',data['date'].min())
+#Постройте гистограмму по дате и времени
+gropu_date = data[['date','eventname']].groupby('date').agg({'eventname':'count'})
+gropu_datetime = data[['datetime','eventname']].groupby('datetime').agg({'eventname':'count'})
+
+
+plt.figure(figsize=(15, 6))
+gropu_date.plot(kind='bar', title = 'Событий в день')
+plt.ylabel("Кол-во событий")
+plt.xlabel("Даты")
+
+### Выводы по графику:
+ в логи попали данные за конец июля, однако их-кол-во незначительно и для анализа мы возьмем данные за август
+old = len(data)
+old_user = len(data['id'].unique())
+data.head()
+# отбросим данные старше 1го августа
+
+df = data[data['date']>'2019-07-31']
+new = len(df)
+new_user = len(df['id'].unique())
+print((1-new/old)*100)
+print((1-new_user/old_user)*100)
+print(old-new)
+print(old_user-new_user)
+print(data['expid'].unique())
+
+
+- доступны данные за первую неделю августа 2019
+- потеряли 2826 строк данных, доля составила 1.1 %
+- потеряли 17 юзеров, доля составила 0.2 %
+- есть пользователи из всех трёх групп
+
+# Воронка событий
+
+## Шаг 4. Изучите воронку событий
+#Сортировка событий по частоте.
+df.groupby('eventname').agg({'id':'nunique'}).sort_values(by='id').plot(kind='barh')
+plt.ylabel("Тип события")
+plt.xlabel("Уникальных пользователей")
+
+
+#Сортировка событий по частоте.
+df.groupby('eventname').agg({'id':'count'}).sort_values(by='id').plot(kind='barh')
+plt.ylabel("Тип события")
+plt.xlabel("кол-во событий")
+
+event_type = df.groupby('eventname').agg({'id':'nunique'}).sort_values(by='id',ascending=False)
+event_type = event_type.reset_index(level=0)
+event_type['share'] = round(event_type['id']/len(df['id'].unique())*100,2)
+
+
+события проходят в следующем порядке:
+MainScreenAppear>Tutorial>OffersScreenAppear>CartScreenAppear>PaymentScreenSuccessful
+
+Но туториал мы уберем из анализа так как его почти все пропускают.
+
+# какая доля пользователей проходит на следующий шаг воронки
+event_type['funnel'] = round(event_type['id'] / event_type.shift(1)['id'] * 100,2)
+event_type = event_type.fillna(98.47)
+event_type = event_type.drop(event_type.index[4])
+event_type
+
+
+data = dict(x=list(event_type['id']),y=list(event_type['eventname']))
+fig = px.funnel(data, x='x', y='y')
+fig.show()
+
+На шаге спец предложения теряете больше всего пользователей.
+
+47% пользователей доходит от первого события до оплаты.
+# результаты эксперимента
+top_event = list(event_type['eventname'])
+top_event
+group_a = df[df['expid'] == 246]
+group_aa = df[df['expid'] == 247]
+group_b = df[df['expid'] == 248]
+print('кол-во пользователей в А:',len(group_a['id'].unique()))
+print('кол-во пользователей в А_1:',len(group_aa['id'].unique()))
+print('кол-во пользователей в B:',len(group_b['id'].unique()))
+
+comon_a = group_a.merge(group_aa,left_on='id',right_on='id',how='inner')
+comon = comon_a.merge(group_b,left_on='id',right_on='id',how='inner')
+comon
+### пересечений пользователей не обнаружено
+пользователей перескачивших между группами нет
+#Нулевая гипотеза: - различий между группами нет
+#Альтернативная - различия между группами есть
+# статистические критерии разницу между выборками 246 и 247
+
+a = group_a.groupby('id').agg({'eventname':'count'})
+aa = group_aa.groupby('id').agg({'eventname':'count'})
+a = a.reset_index(level=0)
+aa = aa.reset_index(level=0)
+print("{0:.3f}".format(st.mannwhitneyu(a['eventname'],aa['eventname'])[1]))
+print("{0:.3f}".format(a['eventname'].mean() / aa['eventname'].mean() - 1))
+####  Гипотезы:
+Для дальнейших проверок
+Нулевая гипотеза: - различий между группами нет
+Альтернативная - различия между группами есть
+z_criteria(group_a,group_aa,top_event)
+Можно сказать, что разбиение на группы работает корректно
+z_criteria(group_a,group_b,top_event)
+z_criteria(group_aa,group_b,top_event)
+a = pd.concat([group_a,group_aa])
+
+z_criteria(a,group_b,top_event)
+g_a = group_a.groupby('eventname').agg({'id':'nunique'})
+g_aa = group_aa.groupby('eventname').agg({'id':'nunique'})
+g_b = group_b.groupby('eventname').agg({'id':'nunique'})
+
+g_a = g_a.reset_index(level=0)
+g_aa = g_aa.reset_index(level=0)
+g_b  = g_aa.reset_index(level=0)
+
+#Нулевая гипотеза: - различий между группами нет
+#Альтернативная - различия между группами есть
+# статистические критерии разницу между выборками 246 и 247
+
+a = group_a.groupby('id').agg({'eventname':'count'})
+b = group_b.groupby('id').agg({'eventname':'count'})
+a = a.reset_index(level=0)
+b = b.reset_index(level=0)
+print("{0:.3f}".format(st.mannwhitneyu(a['eventname'],b['eventname'])[1]))
+print("{0:.3f}".format(b['eventname'].mean() / a['eventname'].mean() - 1))
+### Вывод
+ P-value значительно больше 0.05. Значит, причин отвергать нулевую гипотезу и считать, что в среднем чеке есть различия, нет. Впрочем, среднее кол-во пройденых этапов группы B больше на 4% чем в 246.
+#Нулевая гипотеза: - различий между группами нет
+#Альтернативная - различия между группами есть
+# статистические критерии разницу между выборками 247 и 248
+
+a = group_aa.groupby('id').agg({'eventname':'count'})
+b = group_b.groupby('id').agg({'eventname':'count'})
+a = a.reset_index(level=0)
+b = b.reset_index(level=0)
+print("{0:.3f}".format(st.mannwhitneyu(a['eventname'],b['eventname'])[1]))
+print("{0:.3f}".format(b['eventname'].mean() / a['eventname'].mean() - 1))
+#Нулевая гипотеза: - различий между группами нет
+#Альтернативная - различия между группами есть
+# статистические критерии разницу между выборками 246-7 и 248
+
+unit_a = pd.concat([group_a,group_aa],axis=0)
+unit_a = unit_a.drop_duplicates()
+a = unit_a.groupby('id').agg({'eventname':'count'})
+b = group_b.groupby('id').agg({'eventname':'count'})
+a = a.reset_index(level=0)
+b = b.reset_index(level=0)
+print("{0:.3f}".format(st.mannwhitneyu(a['eventname'],b['eventname'])[1]))
+print("{0:.3f}".format(b['eventname'].mean() / a['eventname'].mean() - 1))
+
+### Вывод
+ P-value значительно больше 0.01. Значит, причин отвергать нулевую гипотезу и считать, что в среднем кол-ве пройденых этапов есть различия, нет. Впрочем, среднее кол-во пройденых этапов группы B больше на 9% чем в 247.
+ Проведено 16 проверок стат. Проведено сравнение на равенство долей для объеденной группы А и эксперементальной, нет оснований считать доли разными. Меня уровень значимости не считаю нужным.
+ p.s.
+ Мы проводим А/Б тест, а не А/B/n  тест поэтому применять поправку Бонферрони не целесообразно. Мы проверяем тех же пользователей, но на разных этапах. Изменение было внесено одно,а не несколько шрифтов.
+# визуализации
+# ПОВЕДЕНИЕ ПОЛЬЗОВАТЕЛЯ В ГРУППЕ 246
+sampl_a = group_a.groupby('id').agg({'eventname':'nunique'})
+visual_a = group_a.merge(sampl_a,left_on='id',right_on='id', how='left')
+visual_a = visual_a.dropna().drop_duplicates()
+
+vis_a = visual_a.groupby('date').agg({'id':'nunique'})
+vis_a = vis_a.reset_index(level=0)
+
+# ПОВЕДЕНИЕ ПОЛЬЗОВАТЕЛЯ В ГРУППЕ 247
+sampl_aa = group_aa.groupby('id').agg({'eventname':'nunique'})
+visual_aa = group_aa.merge(sampl_aa,left_on='id',right_on='id', how='left')
+visual_aa = visual_aa.dropna().drop_duplicates()
+
+vis_aa = visual_aa.groupby('date').agg({'id':'nunique'})
+vis_aa = vis_aa.reset_index(level=0)
+
+# ПОВЕДЕНИЕ ПОЛЬЗОВАТЕЛЯ В ГРУППЕ 248
+sampl_b = group_b.groupby('id').agg({'eventname':'nunique'})
+visual_b = group_b.merge(sampl_b,left_on='id',right_on='id', how='left')
+visual_b = visual_b.dropna().drop_duplicates()
+
+vis_b = visual_b.groupby('date').agg({'id':'nunique'})
+vis_b = vis_b.reset_index(level=0)
+
+'''plt.figure(figsize=(15, 6))
+plt.plot(vis_a['date'],vis_a['id'],label='A')
+plt.plot(vis_aa['date'],vis_aa['id'],label='A2')
+plt.plot(vis_b['date'],vis_b['id'],label='B')
+
+
+plt.ylabel("Среднее кол-во юзеров")
+plt.xlabel("Даты")
+plt.grid()
+plt.legend()'''
+visual_b.head()
+v_a = visual_a.groupby('date').agg({'eventname_y':'mean'})
+v_a = v_a.reset_index(level=0)
+
+v_aa = visual_aa.groupby('date').agg({'eventname_y':'mean'})
+v_aa = v_aa.reset_index(level=0)
+
+v_b = visual_b.groupby('date').agg({'eventname_y':'mean'})
+v_b = v_b.reset_index(level=0)
+plt.figure(figsize=(15, 6))
+plt.plot(v_a['date'],v_a['eventname_y'],label='A')
+plt.plot(v_aa['date'],v_aa['eventname_y'],label='A2')
+plt.plot(v_b['date'],v_b['eventname_y'],label='B')
+
+
+plt.ylabel("Среднее кол-во этапов")
+plt.xlabel("Даты")
+plt.grid()
+plt.legend()
+a_s = visual_a[['id','eventname_y']].drop_duplicates()
+aa_s = visual_aa[['id','eventname_y']].drop_duplicates()
+b_s = visual_b[['id','eventname_y']].drop_duplicates()
+
+print(a_s['eventname_y'].mean())
+print(aa_s['eventname_y'].mean())
+print(b_s['eventname_y'].mean())
+# Вывод
+Проведено исследование логов эксперемента А/А-Б теста. Разделение на группы работает корректно. Эти выборки можно считать статистически достоверными. На шаге спец предложения отваливается больше всего пользователей,те кто остался с вероятностью 80% дойдут до оплаты, 47% пользователей доходит от первого события до оплаты.
+
+Также интерес вызвает этап с конверсией в корзину из общего числа пользователей. Обе подгрупы А показали себя лучше чем группа В. возможно стоит подробнее изучить как отличается корзина, может новый шрифт чуть смазал восприятие.
+После анализа можно сказать, что p-value слишком велико, чтобы уверено утверждать о статистическом различии в группах. учитывая, что тест проходил лишь 1 неделю. Для уверености можно продолжить его, чтобы убедиться в тенденции. В обеих подгруппах А, люди в среднем хуже проходили по воронке, возможно в дальнейшем эта разница только увеличиться. И графики показывают как группа В в среднем превосходит по кол-ву уников на каждую дату.
