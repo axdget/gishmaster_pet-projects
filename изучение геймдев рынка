@@ -1,0 +1,352 @@
+import pandas as pd 
+import numpy as np
+import seaborn as sb
+from scipy import stats as st
+from matplotlib import pyplot as plt
+#pd.set_option('display.max_rows',None)
+pd.set_option('display.max_columns',None)
+data = pd.read_csv('/datasets/games.csv')
+### Выводы по шагу 1
+Библиотеки загружены, файл прочитан.
+## Шаг 2. Подготовьте данные
+
+Замените названия столбцов (приведите к нижнему регистру);
+Преобразуйте данные в нужные типы. Опишите, в каких столбцах заменили тип данных и почему;
+data.info()
+data = data.rename(columns=lambda x: x.lower())
+data['name'] = data['name'].str.lower()
+data['platform'] = data['platform'].str.lower()
+data['genre'] = data['genre'].str.lower()
+data = data.drop_duplicates()
+data.describe()
+data['year_of_release'] = pd.to_datetime(data['year_of_release'], format='%Y')
+data['user_score'] = data['user_score'].replace('tbd', np.NaN)
+data['critic_score'] = data['critic_score'].replace('tbd', np.NaN)
+data['user_score'] = data['user_score'].astype(float)
+data['year_of_release'] = data['year_of_release'].dt.year
+data['year_of_release'].isna().sum()
+data['year_of_release']
+data.info()
+Обработайте пропуски при необходимости:
+Объясните, почему заполнили пропуски определённым образом или почему не стали это делать;
+Опишите причины, которые могли привести к пропускам;
+data = data.dropna(subset=['year_of_release','name'])
+genre_uniq = data['genre'].unique()
+genre_uniq
+
+
+#for i in genre_uniq:
+#    med_c = data.loc[data['genre'] == i]['critic_score'].median()
+#    med_u = data.loc[data['genre'] == i]['user_score'].median()
+#    data.loc[data['genre'] == i,'critic_score'] = data.loc[data['genre'] == i,'critic_score'].fillna(med_c)
+#    data.loc[data['genre'] == i,'user_score'] = data.loc[data['genre'] == i,'user_score'].fillna(med_u)
+
+Обратите внимание на аббревиатуру 'tbd' в столбце с оценкой пользователей. Отдельно разберите это значение и опишите, как его обработать;
+Посчитайте суммарные продажи во всех регионах и запишите их в отдельный столбец.
+data['total_sales'] = data['na_sales'] + data['eu_sales'] + data['jp_sales'] + data['other_sales']
+data['total_sales'] = data['total_sales'].replace(0, np.NaN)
+data = data.dropna(subset=['total_sales'])
+len(data['name'].unique())
+year_gap = pd.pivot_table(data,index='year_of_release')
+display(year_gap[['critic_score','user_score']])
+
+platform_gap = pd.pivot_table(data,index='platform')
+display(platform_gap[['critic_score','user_score']])
+### Выводы по шагу 2
+
+    Пропуски в оценке и рейтиниге отсавлены, так как они относятся к играм и платформам не актуальных для нашего исследования. Заменить их другим значением тоже не представляется возможным, поскольку рейтинг и оценка определяется содержаением игры, чего в дата фрейме не отражено.
+    
+Все названия стобцов и значения в столбцах приведены в нижний регистр.
+    
+Удалены дубликаты.
+    
+Типы данных приведены в соотвестиве с их содержимым.
+    
+Возможные причины позникновения пропусков:
+1)ошибки при заведение данных в таблицу, в названии и годе выпуска.
+2)малая известность игры причина почему никто не стал ставить оценки.
+    
+Посчитаны сумарные продажи во всех регионах в отдельном столбце.
+
+
+## Шаг 3. Проведите исследовательский анализ данных
+
+Посмотрите, сколько игр выпускалось в разные годы. Важны ли данные за все периоды?
+
+years_releas = pd.pivot_table(data,values = 'name',index ='year_of_release', aggfunc='count')
+years_releas
+
+ По таблице виден постепенный рост выпущенных игр за год, игры до 1994 могут быть проигнорированы.
+
+
+Посмотрите, как менялись продажи по платформам. Выберите платформы с наибольшими суммарными продажами и постройте распределение по годам. За какой характерный срок появляются новые и исчезают старые платформы?
+
+platform_sales = pd.pivot_table(data,values = 'total_sales',index ='year_of_release',columns = 'platform', aggfunc='sum')
+sales_per_platform = pd.pivot_table(data,values = 'total_sales',index ='platform', aggfunc='sum')
+sales_per_platform.sort_values(by ='total_sales',ascending = False)
+top_sale_list = sales_per_platform.nlargest(5,'total_sales').index
+for pltfrm in top_sale_list:
+    data[['platform','year_of_release','total_sales']].loc[data['platform'] == pltfrm].groupby('year_of_release').sum().plot(kind='bar', title = pltfrm)
+ Средний рост популярности платформы занимает 4 года,пик приходится на 5 год жизни консоли. Потом также 4 года идет постепенный спад. Такой график наблюдается на платформах с максимальным кол-вом продаж.
+</font> 
+Возьмите данные за соответствующий актуальный период. Актуальный период определите самостоятельно в результате исследования предыдущих вопросов. Основной фактор — эти данные помогут построить прогноз на 2017 год.
+Актуальный период 2013-2016
+
+Замена Nan в столбце "rating" на заглушку 'no_rating'
+
+data['rating'] = data['rating'].fillna('no_rating')
+actual_data = data.loc[data['year_of_release']>2012]
+
+actual_data_piv = pd.pivot_table(actual_data,values = 'total_sales',index ='platform', aggfunc='sum')
+actual_data_piv.sort_values(by ='total_sales',ascending = False)
+
+for pltfrm in actual_data_piv.nlargest(5,'total_sales').index:
+    actual_data[['platform','year_of_release','total_sales']].loc[actual_data['platform'] == pltfrm].groupby('year_of_release').sum().plot(kind='bar', title = pltfrm)
+actual_data_piv.nlargest(5,'total_sales').index
+Какие платформы лидируют по продажам, растут или падают? Выберите несколько потенциально прибыльных платформ.
+
+Лидеры по продажам за актуальный период:'ps4', 'ps3', 'xone', '3ds', 'x360'
+Рост за актуальный период:'ps4', 'xone'(учитывая неполные данные за 2016)
+Падениеза актуальный период:'ps3', '3ds', 'x360'
+потенциально прибыльные:'ps4', 'xone'
+</font> 
+
+
+import matplotlib.ticker as ticker
+
+ax = actual_data.astype({'year_of_release' : 'int'}).pivot_table(index='year_of_release',
+                                                                 columns='platform',
+                                                                 values='total_sales',
+                                                                 aggfunc='sum').plot(figsize=(15,6), cmap='tab20')
+plt.gcf().set_dpi(150)
+
+ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+Постройте график «ящик с усами» по глобальным продажам игр в разбивке по платформам. Опишите результат.
+
+for pltfrm in actual_data_piv.nlargest(5,'total_sales').index:
+    sb.boxplot(data=data[['platform','total_sales']].loc[data['platform'] == pltfrm], x="total_sales", y="platform")
+    plt.show()
+    print(data[['platform','total_sales']].loc[data['platform'] == pltfrm].describe())
+    print('------------------------------------------')
+
+
+plt.figure(figsize=(15,6))
+sb.boxplot(data=actual_data, y='total_sales', x='platform')
+plt.gcf().set_dpi(150)
+
+<b>Комментарий студента:</b>
+<br> Графики показвают, что для каждой платформы можно найти определнное кол-во хитов которые и собирают основные продажи. При этот игры не поповшие в шорт-лист показывают слабые показатели.Средние продажи по интересующих нас платформ составляют 0.6 млн проданых копий.
+</font> 
+data.info()
+
+Посмотрите, как влияют на продажи внутри одной популярной платформы отзывы пользователей и критиков. Постройте диаграмму рассеяния и посчитайте корреляцию между отзывами и продажами.
+
+ps4_sales = data[['critic_score','user_score','total_sales']].loc[data['platform']=='ps4']
+#ps4_sales_stat = ps4_sales.pivot_table(index = 'name',values =['user_score','critic_score','total_sales'])
+ps4_sales.plot(x='user_score',y='total_sales',kind='scatter')
+plt.show()
+ps4_sales.plot(x='critic_score',y='total_sales',kind='scatter')
+#ps4_sales[['critic_score','total_sales']]
+#pd.plotting.scatter_matrix(ps4_sales[['user_score','total_sales']], figsize=(9,9))
+print(ps4_sales.corr())
+
+<br> Графики показвают, что чем выше оценка тем больше продаж.Наиболее ярко это выражено для оценок критиков. Оценки пользователей мене влиятельны на продажи, однако лидеры все равно находятся в секторе с высокими оценками.
+</font> 
+
+for pltfrm in actual_data_piv.nlargest(5,'total_sales').index:
+    print('Матрица корреляций для:',pltfrm)
+    print(data[['critic_score','user_score','total_sales']].loc[data['platform']== pltfrm].corr())
+Соотнесите выводы с продажами игр на других платформах.
+
+
+<br> Продажи на других платформах имеют схожие зависимости. Это доказывают таблицы выше. От платформы к платформе меняется интенсивость зависимости однако, она сохраняется.
+</font> 
+
+
+actual_data.groupby('platform')[['user_score','critic_score']].corrwith(actual_data['total_sales']).round(2)
+Посмотрите на общее распределение игр по жанрам. Что можно сказать о самых прибыльных жанрах? Выделяются ли жанры с высокими и низкими продажами?
+
+genger_piv = actual_data.pivot_table(index='genre', values='total_sales',aggfunc=['count','median'])
+genger_piv = genger_piv.set_axis(['count', 'median'], axis=1)
+print(genger_piv.sort_values(by='count', ascending=False))
+
+#actual_data.pivot_table(index='genre', values='total_sales',aggfunc=['sum','median']).sort_values(by='total_sales', ascending=False).nlargest(5,'total_sales').index
+actual_data
+
+<br> Продажи по жанрам распределены с относительно равноменым уменьшением от игры в жанре action с 1716.52 млн продаж до игр в жанре strategy с 172.57 млн продаж. 
+
+Наиболее интересные для продажи игры жанров:'action', 'sports', 'shooter', 'role-playing', 'platform'
+
+Игры с наиболее низкими продажами:strategy,adventure, puzzle.
+
+Возможно игры с более сложными решениями и в целом заставляющие принимать решения в процессе игры, менее интересны так как не позволяют сразу после запуска начать получать удовольствие от процесса.
+    
+    
+</font> 
+### Выводы по шагу 3
+
+<br> 
+Цикл жизни платформы составляет около 9 лет, с пиком продаж на 5 год. Также на продажи влияет оценка критиков, выше оценка выше продажи. Наиболее перспективные для разработки в 2017 являются PS4 и XboxOne.Игру стоит выбирать из наиболее популярных жанров таких как: 'action', 'sports', 'shooter', 'role-playing', 'platform'
+
+Выросла конкуренция, это видно по постепенному росту кол-ва уникальных тайтлов и их постепенное снижение после 2010. 
+
+Стратегия поведения завсити от бюджета на игру, возможно имеет смысл потратить бюджет на игры в секторе с низкой конкуренцией.
+    
+    
+</font> 
+## Шаг 4. Составьте портрет пользователя каждого региона
+
+Определите для пользователя каждого региона (NA, EU, JP):
+Самые популярные платформы (топ-5). Опишите различия в долях продаж.
+actual_data.head(1)
+top_plat_na = pd.pivot_table(actual_data,values = 'na_sales',index ='platform', aggfunc='sum')
+top_plat_na_ttl = top_plat_na
+top_plat_na = top_plat_na.nlargest(5,'na_sales')
+top_plat_na['sale_share'] = top_plat_na['na_sales']/top_plat_na_ttl['na_sales'].sum()//0.01
+print(top_plat_na)
+
+top_plat_eu = pd.pivot_table(actual_data,values = 'eu_sales',index ='platform', aggfunc='sum')
+top_plat_eu_ttl = top_plat_eu
+top_plat_eu = top_plat_eu.nlargest(5,'eu_sales')
+top_plat_eu['sale_share'] = top_plat_eu['eu_sales']/top_plat_eu_ttl['eu_sales'].sum()//0.01
+print(top_plat_eu)
+
+top_plat_jp = pd.pivot_table(actual_data,values = 'jp_sales',index ='platform', aggfunc='sum')
+top_plat_jp_ttl = top_plat_jp
+top_plat_jp = top_plat_jp.nlargest(5,'jp_sales')
+top_plat_jp['sale_share'] = top_plat_jp['jp_sales']/top_plat_jp_ttl['jp_sales'].sum()//0.01
+print(top_plat_jp)
+
+<br> 
+
+В северной америке продажи в пятерке распеределились более равномерно между ведущими платформами playstation и xbox обеих поколений.
+
+В европе явным лидером является playstation с двумя третями рынка, при этом 40% приходится на playstation 4. но xbox также вхолит в лидеры со своими дмумя поколенямии консолей
+
+В японии лидером является 3ДС с половиной продаж, при этом дальнейшее распределение оказалось относительно равным.
+</font>
+Определите для пользователя каждого региона (NA, EU, JP):
+Самые популярные жанры (топ-5). Поясните разницу.
+top_genre_na = pd.pivot_table(actual_data,values = 'na_sales',index ='genre', aggfunc='sum')
+top_genre_na = top_genre_na.nlargest(5,'na_sales')
+top_genre_na['sale_share'] = top_genre_na['na_sales']/top_genre_na['na_sales'].sum()//0.01
+print(top_genre_na)
+top_genre_eu = pd.pivot_table(actual_data,values = 'eu_sales',index ='genre', aggfunc='sum')
+top_genre_eu = top_genre_eu.nlargest(5,'eu_sales')
+top_genre_eu['sale_share'] = top_genre_eu['eu_sales']/top_genre_eu['eu_sales'].sum()//0.01
+print(top_genre_eu)
+top_genre_jp = pd.pivot_table(actual_data,values = 'jp_sales',index ='genre', aggfunc='sum')
+top_genre_jp = top_genre_jp.nlargest(5,'jp_sales')
+top_genre_jp['sale_share'] = top_genre_jp['jp_sales']/top_genre_jp['jp_sales'].sum()//0.01
+print(top_genre_jp)
+
+
+В северной америке action и shooter забирают на себя 2/3 рынка. затем идут в относительно паритетных долях спортивные и ролевые игры.
+
+В европе картина схожая как в америке, единсветнное 5 место приходится на гонки,а не на аркады.
+
+В японии снова все отличается, первое место(40%) приходится на ролевые игры,затем идут игры в жанре экшон(30%) и затем в относительно равных долях идут аркады, файтинги и шутеры.
+</font>
+Определите для пользователя каждого региона (NA, EU, JP):
+Влияет ли рейтинг ESRB на продажи в отдельном регионе?
+Замена Nan на заглушку 'no_rating'
+actual_data['rating'] = actual_data['rating'].fillna('no_rating')
+top_rating_na = pd.pivot_table(actual_data,values = 'na_sales',index ='rating', aggfunc='sum')
+top_rating_na_ttl = pd.pivot_table(actual_data,values = 'na_sales',index ='rating', aggfunc='sum')
+top_rating_na = top_rating_na.nlargest(5,'na_sales')
+top_rating_na['sale_share'] = top_rating_na['na_sales']/top_rating_na_ttl['na_sales'].sum()//0.01
+print(top_rating_na)
+top_rating_eu = pd.pivot_table(actual_data,values = 'eu_sales',index ='rating', aggfunc='sum')
+top_rating_eu_ttl = top_rating_eu
+top_rating_eu = top_rating_eu.nlargest(5,'eu_sales')
+top_rating_eu['sale_share'] = top_rating_eu['eu_sales']/top_rating_eu_ttl['eu_sales'].sum()//0.01
+print(top_rating_eu)
+top_rating_jp = pd.pivot_table(actual_data,values = 'jp_sales',index ='rating', aggfunc='sum')
+top_rating_jp_ttl = top_rating_jp
+top_rating_jp = top_rating_jp.nlargest(5,'jp_sales')
+top_rating_jp['sale_share'] = top_rating_jp['jp_sales']/top_rating_jp_ttl['jp_sales'].sum()//0.01
+print(top_rating_jp)
+
+<br> 
+    
+Игры без рейтинга заняли относительно равную долю рынка для северной америки и европы, при этом в японии они зяняли лидирующую позицию, около 60% проданных игр не имели рейтинга.
+    
+В америке и европе идентично распределились продажи по рейтингам. Основная доля продаж приходится на рейтинг 17+, около 37 процентов.Затем по популярности игры для всех возрастов. от 10+ и для подростоков раздели по 15% в америке и по 13% в европе.
+
+Однако в японии продажи распределились равномернее. большая часть пришлась на подросток(14%), относительно равно распределились продажи среди игр для всех возрастов и игр для 17+
+</font>
+### Выводы по шагу 4
+
+<br> 
+
+Аудитории северной америки и европы имеют похожий потребительский паттерн, чего нельзя сказать о японии. В западном мире жанры, платформы а также возрастные ограничения иммеют схожее распределение продаж. Япония по платформам и по жанрам стоит особняком. Это стоит учитывать при разарботке своего проект и его локализации.
+</font>
+## Шаг 5. Проверьте гипотезы
+
+H_0:Средние пользовательские рейтинги платформ Xbox One и PC одинаковые;
+
+H_1:Средние пользовательские рейтинги платформ Xbox One и PC неодинаковые;
+xbox_one = actual_data.loc[actual_data['platform'] == 'xone']['user_score']
+pc = actual_data.loc[actual_data['platform'] == 'pc']['user_score']
+alpha = 0.05
+results = st.ttest_ind(xbox_one,pc,nan_policy='omit',equal_var = True)
+# вывод значения p-value на экран 
+print(results.pvalue)
+# условный оператор с выводом строки с ответом
+if results.pvalue < alpha:
+    print('Отвергаем нулевую гипотезу')
+else:
+    print('Не получилось отвергнуть нулевую гипотезу')
+H_0:Средние пользовательские рейтинги жанров Action (англ. «действие», экшен-игры) и Sports (англ. «спортивные соревнования») одинаковые
+
+H_1:Средние пользовательские рейтинги жанров Action (англ. «действие», экшен-игры) и Sports (англ. «спортивные соревнования») разные.
+
+action = actual_data.loc[actual_data['genre'] == 'action']['user_score']
+sports = actual_data.loc[actual_data['genre'] == 'sports']['user_score']
+alpha = 0.01
+results_2 = st.ttest_ind(action,sports,nan_policy='omit',equal_var = True)
+# вывод значения p-value на экран 
+print(results_2.pvalue)
+# условный оператор с выводом строки с ответом
+if results_2.pvalue < alpha:
+    print('Отвергаем нулевую гипотезу')
+else:
+    print('Не получилось отвергнуть нулевую гипотезу')
+    
+
+<br> 
+Задайте самостоятельно пороговое значение alpha.
+Поясните:
+Я сформулировал нулевую и альтернативную гипотезу исходя из задания и учитывая, что нулевая гипотеза всегда со знаком "="
+я выбрал метод "st.ttest_ind" так нужно было сравнить 2 выборки по одному критерию.
+и если статистический критерий значимости преодолен, то отвергаем 
+</font>
+### Выводы по шагу 5
+
+<br>
+    Средние пользовательские рейтинги платформ Xbox One и PC неодинаковые, 
+    Что говорит о не похожести пользовательского опыта данных платформ среди пользовательй попавших в выборку.
+    Средние пользовательские рейтинги жанров Action (англ. «действие», экшен-игры) и Sports (англ. «спортивные соревнования») разные. Это дает нам понять, что как и в кино, оценки пользователей сильно отличаются от жанра к жанру, чем популярнее жанр тем выше там средний бал. 
+    
+</font>
+
+
+'{:.2%}'.format(action.mean() / sports.mean() - 1)
+## Шаг 6. Напишите общий вывод
+Удалены пропуски где не представлялось возможным их как-то заменить. Остальные пропуски были заменены на медиану.
+Возможные причины позникновения пропусков:
+1)ошибки при заведение данных в таблицу, в названии и годе выпуска.
+2)малая известность игры причина почему никто не стал ставить оценки.
+Добавлен столбец для отображения общего числа продаж.
+
+Цикл жизни платформы составляет около 9 лет, с пиком продаж на 5 год.
+Это важно учесть при рассчете времени разработки игры, чтобы она не была опубликована на излете популярности. 
+Также на продажи влияет оценка критиков, выше оценка выше продажи. 
+Наиболее перспективные для разработки в 2017 являются PS4 и XboxOne.
+Игру стоит выбирать из наиболее популярных жанров таких как: 'action', 'shooter'
+При этом очень важно определиться с целевым рынком сбыта, так как исслодование показало схлжесть аудиторий северной америки и европы, при этом японию можно отнести к самобытному рынку со своей спецификой которую нужно учесть при локалиции и маркетинге.
+Стратегия поведения завсити от бюджета на игру, возможно имеет смысл потратить бюджет на игры в секторе с низкой конкуренцией.
+
+
+Также важно понимать различия аудиторий в разрезе платформ и жанорв, так на пример среднии оценки среди пользователей компьютеров и Xbox, а также среди любителей жанров экшн и спорт были различны.
+Поэтому при выборе игры для дистрибьюции каждая платформа на которую будет портирована игра должна быть изучена отдельно, чтобы маркетинг понимал своего потребителя.
